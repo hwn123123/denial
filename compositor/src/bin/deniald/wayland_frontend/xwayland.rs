@@ -111,6 +111,21 @@ impl XWaylandState {
             OsString::from("XCURSOR_SIZE"),
             OsString::from(cursor_size.to_string()),
         )];
+        // Smithay intentionally clears Xwayland's environment. Preserve an
+        // explicitly selected Mesa stack, or a private KGSL session starts
+        // Xwayland with the incompatible system EGL/GBM implementation.
+        for name in [
+            "LD_LIBRARY_PATH",
+            "LIBGL_DRIVERS_PATH",
+            "GBM_BACKENDS_PATH",
+            "MESA_LOADER_DRIVER_OVERRIDE",
+            "__EGL_VENDOR_LIBRARY_FILENAMES",
+            "LANG",
+        ] {
+            if let Some(value) = std::env::var_os(name) {
+                environment.push((OsString::from(name), value));
+            }
+        }
         #[cfg(feature = "flutter")]
         if let Some(cursor_environment) = crate::xcursor_sentinel::environment() {
             environment.extend(
@@ -130,7 +145,7 @@ impl XWaylandState {
                 xwayland_args,
                 true,
                 Stdio::null(),
-                Stdio::null(),
+                Stdio::inherit(),
                 |_| {},
             )
         })?;

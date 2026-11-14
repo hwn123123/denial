@@ -1,0 +1,51 @@
+[Unit]
+Description=Denial mobile session on shennong
+Documentation=https://github.com/hwn123123/denial/tree/deniai-14pro/devices/shennong
+Requires=shennong-graphics.service shennong-touch.service
+Wants=shennong-audio.service dbus.socket
+After=systemd-user-sessions.service dbus.socket lxc@android.service shennong-graphics.service shennong-audio.service shennong-touch.service
+After=phosh.service android-service@hwcomposer.service
+Conflicts=phosh.service android-service@hwcomposer.service getty@tty7.service
+Before=graphical.target
+ConditionPathExists=/dev/tty0
+StartLimitIntervalSec=60
+StartLimitBurst=2
+
+[Service]
+User=droidian
+PAMName=login
+WorkingDirectory=~
+Environment=LANG=zh_CN.UTF-8
+Environment=LANGUAGE=zh_CN:zh
+Environment=XDG_CURRENT_DESKTOP=Denial
+Environment=XDG_SESSION_DESKTOP=denial
+Environment=XDG_SESSION_TYPE=wayland
+Environment=DENIAL_SESSION_CONFIG=/etc/denial/shennong-session.conf
+Environment=DENIAL_SYSTEM_OUTPUT_CONFIG=/etc/denial/shennong-outputs.conf
+# KGSL Mesa is private to this session; Android HWC and Phosh keep their EGL.
+Environment=LD_LIBRARY_PATH=/opt/denial-shennong/mesa/usr/lib/aarch64-linux-gnu
+Environment=LIBGL_DRIVERS_PATH=/opt/denial-shennong/mesa/usr/lib/aarch64-linux-gnu/dri
+Environment=GBM_BACKENDS_PATH=/opt/denial-shennong/mesa/usr/lib/aarch64-linux-gnu/gbm
+Environment=__EGL_VENDOR_LIBRARY_FILENAMES=/opt/denial-shennong/mesa/usr/share/glvnd/egl_vendor.d/50_mesa.json
+Environment=MESA_LOADER_DRIVER_OVERRIDE=kgsl
+Environment=DENIAL_IMPORT_GBM_SCANOUT=1
+Environment=DENIAL_SDE_RELEASE_FENCE=1
+UnsetEnvironment=HYBRIS_LD_LIBRARY_PATH WLR_BACKENDS WLR_HWC_SKIP_VERSION_CHECK
+ExecStartPre=+/usr/libexec/denial-shennong-touch
+ExecStart=/usr/bin/denial-session
+ExecStartPost=+chvt 7
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=20
+TTYPath=/dev/tty7
+TTYReset=yes
+TTYVHangup=yes
+TTYVTDisallocate=yes
+StandardInput=tty-fail
+StandardOutput=journal
+StandardError=journal
+UtmpIdentifier=tty7
+UtmpMode=user
+
+[Install]
+WantedBy=graphical.target

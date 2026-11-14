@@ -1,0 +1,38 @@
+{
+  "denial_version": "0.6.3",
+  "denial_source": "b4155b752619381115cc9d830960483cab4f055a",
+  "engine_source_lock_sha256": "26ef1c32af7b3d26cfb37d0cb3a69ef2f31c18658c1110a5081cf8fa9974f74b",
+  "signing_fingerprint": "AE4108FA5E91E26BE0EE331E0F5B3AD16E023091",
+  "files": [
+    {
+      "name": "denial-flutter-engine_0.6.3-1_arm64.deb",
+      "url": "https://github.com/denialwm/denial/releases/download/v0.6.3/denial-flutter-engine_0.6.3-1_arm64.deb",
+      "sha256": "c721a712f785dbc0595a7e8edf3896bfb228f99ae2e15ca1dbe42b795fb7402b"
+    },
+    {
+      "name": "denial-flutter-engine_0.6.3-1_arm64.deb.sig",
+      "url": "https://github.com/denialwm/denial/releases/download/v0.6.3/denial-flutter-engine_0.6.3-1_arm64.deb.sig",
+      "sha256": "955988957cb92bad22283fef66fd77f20c36cecc83feff4688c606fecfb20451"
+    },
+    {
+      "name": "denial-repo-key.asc",
+      "url": "https://github.com/denialwm/denial/releases/download/v0.6.3/denial-repo-key.asc",
+      "sha256": "1b388fda64771cdc2b02695b1d418d354d5afe6bc001d69816f1c4ec43bc4b9c"
+    },
+    {
+      "name": "denial_0.6.3-1_arm64.deb",
+      "url": "https://github.com/denialwm/denial/releases/download/v0.6.3/denial_0.6.3-1_arm64.deb",
+      "sha256": "7d373933085995b6b1812de9ae9b3e743d563d7ebd56d645b48846b721f99549"
+    },
+    {
+      "name": "denial_0.6.3-1_arm64.deb.sig",
+      "url": "https://github.com/denialwm/denial/releases/download/v0.6.3/denial_0.6.3-1_arm64.deb.sig",
+      "sha256": "2cba43f949cfc835870d0fa7b624f9c202b5b85209059d8ee8cfd17633229719"
+    },
+    {
+      "name": "mesa-for-android-container_27.0.0-devel-20261025-r2_debian_testing_arm64.tar.gz",
+      "url": "https://github.com/lfdevs/mesa-for-android-container/releases/download/mesa-27.0.0-devel-20261025-r2/mesa-for-android-container_27.0.0-devel-20261025-r2_debian_testing_arm64.tar.gz",
+      "sha256": "25a05d624bb215b656b8446d1b559e36af24e8f7d9c1529445fe97f6f777dc73"
+    }
+  ]
+}

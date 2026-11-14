@@ -390,9 +390,64 @@ impl VolitionEvents {
     }
 }
 
+// SDE allocates this descriptor during atomic property parsing. The binary
+// owns raw descriptor conversion; Volition's library remains entirely safe Rust.
+fn finish_sde_release_fence(raw: i64, wait: bool) -> std::io::Result<()> {
+    use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+    if raw < 0 || raw > i64::from(i32::MAX) {
+        return if wait {
+            Err(std::io::Error::other("SDE returned no release fence"))
+        } else {
+            Ok(())
+        };
+    }
+    // SAFETY: SDE returned a new descriptor owned by this commit caller.
+    let fence = unsafe { OwnedFd::from_raw_fd(raw as i32) };
+    if !wait {
+        return Ok(());
+    }
+    let deadline = Instant::now() + Duration::from_millis(250);
+    loop {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::TimedOut,
+                "SDE scanout release fence timed out",
+            ));
+        }
+        let mut descriptor = libc::pollfd {
+            fd: fence.as_raw_fd(),
+            events: libc::POLLIN,
+            revents: 0,
+        };
+        // SAFETY: the initialized descriptor lives through this bounded poll.
+        let result = unsafe { libc::poll(&mut descriptor, 1, remaining.as_millis().max(1) as i32) };
+        if result < 0 {
+            let error = std::io::Error::last_os_error();
+            if error.kind() == std::io::ErrorKind::Interrupted {
+                continue;
+            }
+            return Err(error);
+        }
+        if result == 0 {
+            continue;
+        }
+        if descriptor.revents & (libc::POLLERR | libc::POLLNVAL) != 0 {
+            return Err(std::io::Error::other("SDE scanout release fence failed"));
+        }
+        if descriptor.revents & libc::POLLIN != 0 {
+            return Ok(());
+        }
+        return Err(std::io::Error::other(
+            "SDE scanout release fence closed before signaling",
+        ));
+    }
+}
+
 fn plane_commit(scanout: &Scanout, size: PixelSize) -> Result<PlaneCommit, Box<dyn Error>> {
+    use smithay::reexports::drm::control::Device as _;
     let properties = scanout.plane_properties;
-    Ok(PlaneCommit::new(
+    let commit = PlaneCommit::new(
         scanout.surface.plane(),
         PlaneProperties {
             framebuffer: properties.framebuffer,
@@ -409,7 +464,21 @@ fn plane_commit(scanout: &Scanout, size: PixelSize) -> Result<PlaneCommit, Box<d
             width: size.width,
             height: size.height,
         },
-    ))
+    );
+    if denial_core::environment::flag("DENIAL_SDE_RELEASE_FENCE") {
+        let drm = scanout.surface.device_fd();
+        for (handle, _) in drm.get_properties(scanout.output.crtc)? {
+            if drm.get_property(handle)?.name().to_str() == Ok("output_fence") {
+                return Ok(commit.with_release_fence(
+                    scanout.output.crtc.into(),
+                    handle,
+                    finish_sde_release_fence,
+                ));
+            }
+        }
+        return Err("selected SDE release-fence mode but CRTC has no output_fence property".into());
+    }
+    Ok(commit)
 }
 
 #[derive(Debug)]

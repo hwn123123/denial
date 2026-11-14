@@ -327,6 +327,39 @@ impl AtlasPlaneProperties {
 }
 
 impl Scanout {
+    pub(super) fn clear_for_dpms(&self) -> Result<(), Box<dyn Error>> {
+        if self.plane_properties.smithay_opaque_alpha == 1.0 {
+            return self.surface.clear().map_err(Into::into);
+        }
+        // Smithay's generic clear resets alpha to 0xffff. Qualcomm's
+        // downstream plane exposes 0..255, so that reset fails EINVAL before
+        // it can switch the panel off. Detach only the owned scanout and its
+        // connectors/CRTC, preserving unrelated plane property values.
+        let drm = self.surface.device_fd();
+        let plane = self.surface.plane();
+        let crtc = self.output.crtc;
+        let mut request = AtomicModeReq::new();
+        request.add_raw_property(plane.into(), named_property(drm, plane, "FB_ID")?, 0);
+        request.add_raw_property(plane.into(), named_property(drm, plane, "CRTC_ID")?, 0);
+        for connector in self.surface.current_connectors() {
+            request.add_raw_property(
+                connector.into(),
+                named_property(drm, connector, "CRTC_ID")?,
+                0,
+            );
+        }
+        request.add_raw_property(crtc.into(), named_property(drm, crtc, "ACTIVE")?, 0);
+        request.add_raw_property(crtc.into(), named_property(drm, crtc, "MODE_ID")?, 0);
+        if let Some(property) = optional_named_property(drm, crtc, "VRR_ENABLED")? {
+            request.add_raw_property(crtc.into(), property, 0);
+        }
+        drm.atomic_commit(AtomicCommitFlags::ALLOW_MODESET, request)?;
+        // Re-read the actual inactive state so Smithay's next commit restores
+        // the mode, connector and ACTIVE together with the fresh lock frame.
+        self.surface.reset_state()?;
+        Ok(())
+    }
+
     pub(super) fn rotation_property(
         &self,
         transform: OutputTransform,
@@ -804,7 +837,13 @@ impl ScanoutBuffer {
         let buffer = allocator.create_buffer(size.width, size.height, code, modifiers)?;
         let format = smithay::backend::allocator::Buffer::format(&buffer);
         let dmabuf = buffer.export()?;
-        let framebuffer = if cross_device {
+        // KGSL's Mesa GBM allocator uses KGSL object handles even when its
+        // device was created from the display-only downstream DRM card. The
+        // card's fd equality therefore does not imply a shared GEM namespace.
+        // Import its exported dma-buf on the KMS fd, as for separate GPUs.
+        let import_gbm_scanout =
+            std::env::var_os("DENIAL_IMPORT_GBM_SCANOUT").is_some_and(|value| value == "1");
+        let framebuffer = if cross_device || import_gbm_scanout {
             framebuffer_from_prime_dmabuf(drm_fd, &dmabuf)?
         } else {
             framebuffer_from_scanout_bo(drm_fd, &buffer, code)?
@@ -2716,7 +2755,7 @@ fn capture_owned_framebuffer(
 }
 
 fn named_property<H>(
-    drm: &DrmDevice,
+    drm: &impl ControlDevice,
     object: H,
     expected_name: &str,
 ) -> Result<property::Handle, Box<dyn Error>>

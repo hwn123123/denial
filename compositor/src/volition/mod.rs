@@ -30,7 +30,7 @@ use smithay::reexports::drm::control::{
 
 use crate::topology::PixelRect;
 
-const MAX_ATOMIC_PLANE_PROPERTIES: usize = 7;
+const MAX_ATOMIC_PLANE_PROPERTIES: usize = 8;
 /// Submit far enough ahead of the target for the driver to latch the atomic
 /// state for that edge.  The ioctl itself is cheap, but several DRM drivers
 /// close their scanout latch materially earlier than the physical vblank.
@@ -73,24 +73,28 @@ pub struct PlaneProperties {
 /// be retained by Denial and cloned into a Volition lookahead job.
 #[derive(Clone, Debug)]
 pub struct PlaneCommit {
-    objects: [u32; 1],
-    property_counts: [u32; 1],
+    objects: [u32; 2],
+    property_counts: [u32; 2],
     properties: [u32; MAX_ATOMIC_PLANE_PROPERTIES],
     values: [u64; MAX_ATOMIC_PLANE_PROPERTIES],
     property_count: usize,
     fence_index: Option<usize>,
+    release_fence_index: Option<usize>,
+    finish_release_fence: Option<fn(i64, bool) -> io::Result<()>>,
 }
 
 impl PlaneCommit {
     pub fn new(plane: plane::Handle, properties: PlaneProperties, source: PixelRect) -> Self {
         let plane: RawResourceHandle = plane.into();
         let mut request = Self {
-            objects: [u32::from(plane)],
-            property_counts: [0],
+            objects: [u32::from(plane), 0],
+            property_counts: [0, 0],
             properties: [0; MAX_ATOMIC_PLANE_PROPERTIES],
             values: [0; MAX_ATOMIC_PLANE_PROPERTIES],
             property_count: 0,
             fence_index: None,
+            release_fence_index: None,
+            finish_release_fence: None,
         };
         request.push(properties.framebuffer, 0);
         request.push(properties.source_x, u64::from(source.x) << 16);
@@ -109,6 +113,23 @@ impl PlaneCommit {
         request
     }
 
+    /// Qualcomm's downstream command-mode driver reports page flips at
+    /// COMMIT_DONE, before PP_DONE releases the old scanout. Its native
+    /// output_fence property supplies that later release boundary.
+    pub fn with_release_fence(
+        mut self,
+        crtc: u32,
+        property: property::Handle,
+        finish: fn(i64, bool) -> io::Result<()>,
+    ) -> Self {
+        self.finish_release_fence = Some(finish);
+        self.objects[1] = crtc;
+        self.property_counts[1] = 1;
+        self.release_fence_index = Some(self.property_count);
+        self.push(property, 0);
+        self
+    }
+
     fn push(&mut self, property: property::Handle, value: u64) {
         debug_assert!(self.property_count < MAX_ATOMIC_PLANE_PROPERTIES);
         self.properties[self.property_count] = u32::from(property);
@@ -121,14 +142,30 @@ impl PlaneCommit {
         if let Some(index) = self.fence_index {
             self.values[index] = u64::MAX;
         }
-        drm_mode::atomic_commit(
+        // SDE's ABI reads and writes a signed 64-bit fd through this pointer.
+        // Keep it alive through the ioctl and close it on every result path.
+        let mut release_fd: i64 = -1;
+        if let Some(index) = self.release_fence_index {
+            self.values[index] = (&mut release_fd as *mut i64) as u64;
+        }
+        let object_count = if self.release_fence_index.is_some() {
+            2
+        } else {
+            1
+        };
+        let result = drm_mode::atomic_commit(
             drm,
             commit_flags().bits(),
-            &mut self.objects,
-            &mut self.property_counts,
+            &mut self.objects[..object_count],
+            &mut self.property_counts[..object_count],
             &mut self.properties[..self.property_count],
             &mut self.values[..self.property_count],
-        )
+        );
+        let fence_result = self
+            .finish_release_fence
+            .map_or(Ok(()), |finish| finish(release_fd, result.is_ok()));
+        result?;
+        fence_result
     }
 }
 

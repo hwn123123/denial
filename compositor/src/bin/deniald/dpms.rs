@@ -463,7 +463,7 @@ pub(super) fn apply_output_power_requests(
         let mut cleared = Vec::with_capacity(targets.len());
         let mut failure = None;
         for &(output, scanout_index, framebuffer_index) in &targets {
-            match scanouts[scanout_index].surface.clear() {
+            match scanouts[scanout_index].clear_for_dpms() {
                 Ok(()) => cleared.push((output, scanout_index, framebuffer_index)),
                 Err(error) => {
                     failure = Some((scanout_index, error.to_string()));

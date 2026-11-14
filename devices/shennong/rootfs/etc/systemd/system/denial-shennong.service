@@ -30,6 +30,9 @@ Environment=__EGL_VENDOR_LIBRARY_FILENAMES=/opt/denial-shennong/mesa/usr/share/g
 Environment=MESA_LOADER_DRIVER_OVERRIDE=kgsl
 Environment=DENIAL_IMPORT_GBM_SCANOUT=1
 Environment=DENIAL_SDE_RELEASE_FENCE=1
+# Downstream SDE supplies no usable presentation timestamps. Keep the mobile
+# renderer serial while its physical presentation boundary is investigated.
+Environment=DENIAL_RENDER_AHEAD=0
 UnsetEnvironment=HYBRIS_LD_LIBRARY_PATH WLR_BACKENDS WLR_HWC_SKIP_VERSION_CHECK
 ExecStartPre=+/usr/libexec/denial-shennong-touch
 ExecStart=/usr/bin/denial-session

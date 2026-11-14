@@ -73,3 +73,11 @@ through Impeller; Xwayland starts with the session's private Mesa environment.
 Touch and panel power/wake are confirmed. Horizontal tearing, cold-start
 persistence and sustained rendering still require validation before this
 session becomes the boot default. The original Phosh packages stay installed.
+
+The user also retested with render-ahead disabled and with the connector's
+vendor LP state set to ON; tearing remained. At the user's request the live
+device has therefore returned to the original Droidian Phosh desktop.
+`denial-shennong.service` is stopped and disabled; Phosh and its native Android
+HWC service remain the boot selection. Denial is an opt-in research port,
+not the default desktop or a completed tearing fix. Do not automatically
+activate it from image preparation or package installation.
